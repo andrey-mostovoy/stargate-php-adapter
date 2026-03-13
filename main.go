@@ -20,9 +20,11 @@ func main() {
 	mux.HandleFunc("/health", HealthHandler)
 	mux.Handle("/metrics", MetricsHandler())
 
-	log.Println("adapter running on :" + cfg.Port)
+	log.Println("scylla adapter listening :" + cfg.Port)
 
-	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
-		log.Fatal(err)
+	err := http.ListenAndServe(":"+cfg.Port, mux)
+
+	if err != nil {
+		panic(err)
 	}
 }

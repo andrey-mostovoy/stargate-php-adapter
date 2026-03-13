@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"context"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -10,59 +10,50 @@ import (
 type Scylla struct {
 	session *gocql.Session
 	cache   *PreparedCache
+	cfg     Config
 }
 
 func NewScylla(cfg Config) *Scylla {
 
 	cluster := gocql.NewCluster(cfg.Hosts...)
+
 	cluster.Keyspace = cfg.Keyspace
-	cluster.Timeout = time.Duration(cfg.TimeoutMs) * time.Millisecond
 	cluster.NumConns = cfg.NumConns
+	cluster.Timeout = time.Duration(cfg.TimeoutMs) * time.Millisecond
+	cluster.PageSize = cfg.PageSize
 	cluster.Consistency = gocql.Quorum
 	cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 3}
 
 	session, err := cluster.CreateSession()
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	return &Scylla{
 		session: session,
-		cache:   NewCache(),
+		cache:   NewPreparedCache(cfg.PreparedSize),
+		cfg:     cfg,
 	}
 }
 
-func (s *Scylla) Query(cql string, params []interface{}) ([]map[string]interface{}, error) {
+func (s *Scylla) Query(ctx context.Context, cql string, params []interface{}) (*gocql.Iter, error) {
 
-	iter := s.session.Query(cql, params...).Iter()
+	q := s.session.Query(cql, params...)
+	q = q.WithContext(ctx)
 
-	rows := []map[string]interface{}{}
-
-	m := map[string]interface{}{}
-
-	for iter.MapScan(m) {
-
-		row := map[string]interface{}{}
-
-		for k, v := range m {
-			row[k] = v
-		}
-
-		rows = append(rows, row)
-
-		m = map[string]interface{}{}
-	}
-
-	return rows, iter.Close()
+	return q.Iter(), nil
 }
 
-func (s *Scylla) Exec(cql string, params []interface{}) error {
+func (s *Scylla) Exec(ctx context.Context, cql string, params []interface{}) error {
 
-	return s.session.Query(cql, params...).Exec()
+	q := s.session.Query(cql, params...)
+	q = q.WithContext(ctx)
+
+	return q.Exec()
 }
 
-func (s *Scylla) Batch(queries []QueryRequest) error {
+func (s *Scylla) Batch(ctx context.Context, queries []QueryRequest) error {
 
 	b := s.session.NewBatch(gocql.LoggedBatch)
 
@@ -70,5 +61,5 @@ func (s *Scylla) Batch(queries []QueryRequest) error {
 		b.Query(q.CQL, q.Params...)
 	}
 
-	return s.session.ExecuteBatch(b)
+	return s.session.ExecuteBatch(b.WithContext(ctx))
 }

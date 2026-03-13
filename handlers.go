@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/gocql/gocql"
 )
 
 type QueryRequest struct {
@@ -18,22 +22,30 @@ func QueryHandler(s *Scylla) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			time.Duration(s.cfg.TimeoutMs)*time.Millisecond,
+		)
+
+		defer cancel()
+
 		var req QueryRequest
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		err := json.NewDecoder(r.Body).Decode(&req)
+
+		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
 
-		rows, err := s.Query(req.CQL, req.Params)
+		iter, err := s.Query(ctx, req.CQL, req.Params)
 
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(rows)
+		streamRows(w, iter)
 	}
 }
 
@@ -41,14 +53,18 @@ func ExecHandler(s *Scylla) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			time.Duration(s.cfg.TimeoutMs)*time.Millisecond,
+		)
+
+		defer cancel()
+
 		var req QueryRequest
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
+		json.NewDecoder(r.Body).Decode(&req)
 
-		err := s.Exec(req.CQL, req.Params)
+		err := s.Exec(ctx, req.CQL, req.Params)
 
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -63,14 +79,18 @@ func BatchHandler(s *Scylla) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			time.Duration(s.cfg.TimeoutMs)*time.Millisecond,
+		)
+
+		defer cancel()
+
 		var req BatchRequest
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
+		json.NewDecoder(r.Body).Decode(&req)
 
-		err := s.Batch(req.Queries)
+		err := s.Batch(ctx, req.Queries)
 
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -79,6 +99,36 @@ func BatchHandler(s *Scylla) http.HandlerFunc {
 
 		w.WriteHeader(204)
 	}
+}
+
+func streamRows(w http.ResponseWriter, iter *gocql.Iter) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	enc := json.NewEncoder(w)
+
+	w.Write([]byte("["))
+
+	first := true
+
+	m := map[string]interface{}{}
+
+	for iter.MapScan(m) {
+
+		if !first {
+			w.Write([]byte(","))
+		}
+
+		first = false
+
+		enc.Encode(m)
+
+		m = map[string]interface{}{}
+	}
+
+	w.Write([]byte("]"))
+
+	iter.Close()
 }
 
 func HealthHandler(w http.ResponseWriter, r *http.Request) {

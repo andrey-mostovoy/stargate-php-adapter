@@ -1,27 +1,28 @@
 package main
 
-import "sync"
+import (
+	lru "github.com/hashicorp/golang-lru/v2"
+)
 
 type PreparedCache struct {
-	mu sync.RWMutex
-	data map[string]interface{}
+	cache *lru.Cache[string, string]
 }
 
-func NewCache() *PreparedCache {
+func NewPreparedCache(size int) *PreparedCache {
+
+	c, _ := lru.New[string, string](size)
+
 	return &PreparedCache{
-		data: make(map[string]interface{}),
+		cache: c,
 	}
 }
 
-func (c *PreparedCache) Get(q string) (interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	v, ok := c.data[q]
-	return v, ok
+func (p *PreparedCache) Get(q string) (string, bool) {
+
+	return p.cache.Get(q)
 }
 
-func (c *PreparedCache) Set(q string, stmt interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.data[q] = stmt
+func (p *PreparedCache) Set(q string, id string) {
+
+	p.cache.Add(q, id)
 }
