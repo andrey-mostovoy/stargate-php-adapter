@@ -1,0 +1,17 @@
+{
+  "name": "topface/stargate",
+  "description": "Topface stargate adapter for ScyllaDB",
+  "require": {
+    "php": ">=7.4",
+    "ext-grpc": "*",
+    "ext-protobuf": "*",
+    "grpc/grpc": "*",
+    "google/protobuf": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Stargate\\": "src/Stargate",
+      "GPBMetadata\\": "src/GPBMetadata"
+    }
+  }
+}

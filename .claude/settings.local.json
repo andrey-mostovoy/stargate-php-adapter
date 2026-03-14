@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(find /Volumes/work/Topface/scylla-adapter -type f | grep -E '\\\\.\\(md|txt|yaml|yml|docker|makefile|sh\\)$|Dockerfile|Makefile|README' | head -20)",
-      "Bash(go mod:*)"
-    ]
-  }
-}
